@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Michelangelo — Last Judgment (Prototype v2.1)</title>
+  <style>
+    html, body { height: 100%; margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; }
+    #viewer { width: 100%; height: 100vh; background: #0b0b0b; }
+    .hotspot { position: absolute; border: 2px dashed rgba(255,255,255,0.6); background: rgba(255,255,255,0.10); transition: background 0.2s, border-color 0.2s; pointer-events: none; }
+    .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.65); display: none; align-items: center; justify-content: center; z-index: 9999; }
+    .modal { width: min(720px, 92vw); max-height: 86vh; overflow: auto; background: #111; color: #f3f3f3; border-radius: 16px; box-shadow: 0 20px 60px rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.1); }
+    .modal header { padding: 18px 22px; border-bottom: 1px solid rgba(255,255,255,0.08); font-size: 1.1rem; letter-spacing: .2px; background: linear-gradient(180deg, #181818, #121212); position: sticky; top: 0; }
+    .modal .content { padding: 18px 22px 8px; line-height: 1.55; }
+    .modal footer { padding: 14px 22px 18px; border-top: 1px solid rgba(255,255,255,0.08); display: flex; gap: 10px; flex-wrap: wrap; position: sticky; bottom: 0; background: #121212; }
+    .btn { appearance: none; border: 1px solid rgba(255,255,255,0.18); background: #1e1e1e; color: #f3f3f3; padding: 10px 14px; border-radius: 10px; text-decoration: none; display: inline-flex; gap: 8px; align-items: center; cursor: pointer; }
+    .btn:hover { background: #262626; }
+    .btn.primary { background: #2a2a2a; border-color: rgba(255,255,255,0.28); }
+    .hint { position: fixed; left: 12px; bottom: 12px; font-size: 12px; opacity: .75; color: #ddd; background: rgba(0,0,0,0.45); padding: 6px 8px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.12); z-index: 5000; }
+    .interstitial { position: fixed; inset: 0; z-index: 9998; display: none; background: radial-gradient(ellipse at top, #141414, #0b0b0b); color: #eaeaea; padding: 32px 20px; overflow: auto; }
+    .interstitial .box { width: min(820px, 92vw); margin: 0 auto; background: #121212; border-radius: 16px; border: 1px solid rgba(255,255,255,0.1); box-shadow: 0 20px 60px rgba(0,0,0,0.5); }
+    .interstitial header { padding: 18px 22px; border-bottom: 1px solid rgba(255,255,255,0.08); font-weight: 600; }
+    .interstitial .content { padding: 18px 22px; line-height: 1.55; }
+    .interstitial footer { padding: 18px 22px; border-top: 1px solid rgba(255,255,255,0.08); display: flex; gap: 10px; flex-wrap: wrap; }
+    .kbd { border: 1px solid rgba(255,255,255,0.25); border-bottom-width: 2px; padding: 0 6px; border-radius: 6px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; background: #1b1b1b; }
+    #error { position: fixed; top: 10px; left: 10px; right: 10px; background: #561b1b; color: #fbd; padding: 10px 14px; border-radius: 10px; display: none; z-index: 10000; }
+  </style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/openseadragon/4.1.1/openseadragon.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/openseadragon/4.1.1/openseadragon.min.css" crossorigin="anonymous" referrerpolicy="no-referrer" />
+</head>
+<body>
+  <div id="viewer"></div>
+  <div class="hint">Scroll to zoom • drag to pan • click hotspots</div>
+  <div id="error"></div>
+
+  <div class="modal-backdrop" id="modalBackdrop" role="dialog" aria-modal="true" aria-hidden="true">
+    <div class="modal" role="document">
+      <header id="modalTitle">Title</header>
+      <div class="content" id="modalContent"></div>
+      <footer id="modalFooter">
+        <button class="btn" onclick="closeModal()">Close</button>
+      </footer>
+    </div>
+  </div>
+
+  <div class="interstitial" id="interstitial">
+    <div class="box">
+      <header id="interHeader">Explore Further</header>
+      <div class="content" id="interContent"></div>
+      <footer>
+        <a class="btn" href="#" onclick="hideInterstitial(); return false;">← Return to Painting</a>
+      </footer>
+    </div>
+  </div>
+
+  <script>
+    // ---- Content ----
+    const CONTENT = {
+      bartholomew: {
+        title: "St. Bartholomew & Michelangelo’s Self-Portrait",
+        html: `<p>In St. Bartholomew’s limp, flayed skin, many scholars recognize <em>Michelangelo’s</em> own face. The hollowed mask and slack flesh read as a meditation on mortality and divine judgment, but also as a personal statement. Three decades after completing the ceiling, Michelangelo was compelled by Pope Paul III to return to the Sistine Chapel to paint <em>The Last Judgment</em> (1536–41). The self-portrait is often interpreted as the artist’s <strong>dismay and exhaustion</strong> made visible: a skin without rest, suspended between salvation and dread.</p>`,
+        footer: []
+      },
+      christ: {
+        title: "Christ the Judge — Iconography Reimagined",
+        html: `<p>Medieval and early Renaissance <em>Last Judgment</em> scenes (e.g., Giotto, Fra Angelico) often show a hieratic, enthroned Christ dividing the blessed and the damned. Michelangelo breaks with static symmetry. His Christ is an <strong>athletic axis</strong>, setting the entire vortex of saints and angels into motion. The muscular bodies and spiraling composition translate eschatological power into <em>anatomical energy</em> — a distinctly High Renaissance solution to an age-old theme.</p>`,
+        footer: []
+      },
+      lament: {
+        title: "Faces of Lament — History’s Echo",
+        html: `<p>Across the fresco, faces twist in awe and grief. Many art historians have seen in these expressions the trauma of the <strong>Sack of Rome (1527)</strong> and the spiritual anxiety of the <strong>Reformation</strong>. The work channels both personal and collective uncertainty about grace, merit, and judgment in a fractured Christendom.</p>`,
+        footer: []
+      },
+      minos: {
+        title: "Minos (Biagio da Cesena) — Satire in Fresco",
+        html: `<p>At the lower right, the serpent-wrapped <em>Minos</em> judges the damned. Michelangelo gave Minos the recognizable features of <strong>Biagio da Cesena</strong>, the papal Master of Ceremonies who condemned the fresco’s nudity as indecent. In revenge, the artist painted him with <strong>donkey ears</strong> and a coiled serpent biting his genitals — a memorable rebuke immortalized in pigment.</p>`,
+        footer: [`<a class="btn" href="https://www.britannica.com/biography/Biagio-da-Cesena" target="_self">Read more on Britannica</a>`]
+      },
+      charon: {
+        title: "Charon & the Damned — Dante’s Vision",
+        html: `<p>Charon ferries the damned in <em>Inferno</em> Canto III. Michelangelo adapts Dante’s imagery into a tempest of bodies and oars, casting the threshold to Hell as a scene of muscular terror.</p>
+        <p><strong>Explore further:</strong></p>
+        <ul>
+          <li><a href="#" onclick="openResource('dante');return false;">Dante, <em>Inferno</em> III 109–111</a></li>
+          <li><a href="#" onclick="openResource('botticelli');return false;">Botticelli’s <em>Inferno</em> Drawings (Vatican Library)</a></li>
+          <li><a href="#" onclick="openResource('dore');return false;">Gustave Doré’s <em>Inferno</em> Etchings (Public Domain)</a></li>
+        </ul>`,
+        footer: []
+      }
+    };
+
+    const RESOURCES = {
+      dante: {
+        title: "Dante, Inferno — Canto III (109–111)",
+        html: `<p>You’re about to open a trusted external resource. When finished, use your browser’s <span class="kbd">Back</span> button or come back here via the address bar.</p>`,
+        linkText: "Open Dante on Project Gutenberg",
+        href: "https://www.gutenberg.org/files/8800/8800-h/8800-h.htm#link2H_4_0004"
+      },
+      botticelli: {
+        title: "Botticelli’s Divine Comedy — Vatican Library",
+        html: `<p>Explore Botticelli’s illustrated manuscript of the <em>Divine Comedy</em> in the Vatican Library’s digital collection.</p>`,
+        linkText: "Open Vatican Library Collection",
+        href: "https://digi.vatlib.it/view/MSS_Urb.lat.365"
+      },
+      dore: {
+        title: "Gustave Doré — Illustrations for Dante’s Inferno",
+        html: `<p>Browse Doré’s classic 19th-century engravings, now in the public domain via Wikimedia Commons.</p>`,
+        linkText: "Open Doré’s Inferno Illustrations",
+        href: "https://commons.wikimedia.org/wiki/Category:Gustave_Dor%C3%A9%27s_illustrations_for_Dante%27s_Inferno"
+      }
+    };
+
+    // Define hotspot rectangles (normalized to image coords)
+    const HOTSPOTS = [
+      { key: 'bartholomew', rect: { x: 0.54, y: 0.48, w: 0.10, h: 0.12 }, type: 'zoom' },
+      { key: 'charon',      rect: { x: 0.70, y: 0.78, w: 0.20, h: 0.18 }, type: 'modal' },
+      { key: 'minos',       rect: { x: 0.86, y: 0.82, w: 0.10, h: 0.12 }, type: 'modal' },
+      { key: 'christ',      rect: { x: 0.47, y: 0.22, w: 0.10, h: 0.12 }, type: 'modal' },
+      { key: 'lament',      rect: { x: 0.27, y: 0.44, w: 0.12, h: 0.14 }, type: 'modal' },
+    ];
+
+    const viewer = OpenSeadragon({
+      id: "viewer",
+      prefixUrl: "https://cdnjs.cloudflare.com/ajax/libs/openseadragon/4.1.1/images/",
+      tileSources: {
+        type: "legacy-image-pyramid",
+        levels: [{ url: "last-judgment.png", width: 1604, height: 2048 }]
+      },
+      showNavigator: true,
+      navigatorPosition: "BOTTOM_RIGHT",
+      gestureSettingsMouse: { clickToZoom: false, dblClickToZoom: true, flickEnabled: true },
+      zoomPerScroll: 1.2,
+      minZoomLevel: 0.5,
+      maxZoomLevel: 20
+    });
+
+    function showError(msg){
+      const el = document.getElementById('error');
+      el.textContent = msg;
+      el.style.display = 'block';
+    }
+
+    // Draw overlay rectangles for visual guidance (no pointer events)
+    function drawOverlays(){
+      HOTSPOTS.forEach(h => {
+        const elt = document.createElement('div');
+        elt.className = 'hotspot';
+        viewer.addOverlay({
+          element: elt,
+          location: new OpenSeadragon.Rect(h.rect.x, h.rect.y, h.rect.w, h.rect.h)
+        });
+      });
+    }
+
+    // Hit test: is a point inside a rect?
+    function within(p, r){
+      return p.x >= r.x && p.y >= r.y && p.x <= (r.x + r.w) && p.y <= (r.y + r.h);
+    }
+
+    // Modal controls
+    function openModal(key){
+      const data = CONTENT[key];
+      document.getElementById('modalTitle').innerHTML = data.title;
+      document.getElementById('modalContent').innerHTML = data.html;
+      const footer = document.getElementById('modalFooter');
+      footer.innerHTML = '<button class="btn" onclick="closeModal()">Close</button>';
+      (data.footer || []).forEach(html => {
+        const span = document.createElement('span');
+        span.innerHTML = html;
+        footer.appendChild(span.firstChild);
+      });
+      document.getElementById('modalBackdrop').style.display = 'flex';
+    }
+    function closeModal(){ document.getElementById('modalBackdrop').style.display = 'none'; }
+
+    // Interstitial
+    function openResource(id){
+      const res = RESOURCES[id];
+      document.getElementById('interHeader').textContent = res.title;
+      document.getElementById('interContent').innerHTML = `<p>${res.html}</p>
+        <p style="margin-top:12px">
+        <a class="btn primary" href="${res.href}" target="_self">${res.linkText}</a>
+        <a class="btn" href="#" onclick="hideInterstitial();return false;">← Return to Painting</a>
+        </p>`;
+      showInterstitial();
+    }
+    function showInterstitial(){ document.getElementById('interstitial').style.display = 'block'; }
+    function hideInterstitial(){ document.getElementById('interstitial').style.display = 'none'; }
+
+    // Actions
+    function zoomToRect(r, thenModalKey){
+      const rect = new OpenSeadragon.Rect(r.x, r.y, r.w, r.h);
+      viewer.viewport.fitBoundsWithConstraints(rect, true);
+      setTimeout(()=>openModal(thenModalKey), 450);
+    }
+
+    // When image opens
+    viewer.addHandler('open', function(){
+      drawOverlays();
+    });
+
+    // Handle clicks robustly on the canvas itself
+    viewer.addHandler('canvas-click', function(e){
+      // Ignore double-clicks (used for zooming)
+      if (e.quick){
+        const webPoint = e.position; // in pixels
+        const viewportPoint = viewer.viewport.pointFromPixel(webPoint);
+        const imagePoint = viewer.viewport.viewportToImageCoordinates(viewportPoint);
+        // Convert to normalized image coords (0..1)
+        const norm = { x: imagePoint.x / 1604, y: imagePoint.y / 2048 };
+
+        for (const h of HOTSPOTS){
+          if (within(norm, h.rect)){
+            if (h.type === 'zoom') { zoomToRect(h.rect, h.key); }
+            else { openModal(h.key); }
+            break;
+          }
+        }
+      }
+    });
+
+    viewer.addHandler('open-failed', function(e){ showError("Image failed to open. If this is on GitHub Pages, ensure the PNG sits next to index.html."); });
+    viewer.addHandler('tile-load-failed', function(e){ showError("Tile failed to load."); });
+  </script>
+</body>
+</html>

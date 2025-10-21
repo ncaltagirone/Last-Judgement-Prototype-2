@@ -3,11 +3,15 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Michelangelo — Last Judgment (Prototype v2.1)</title>
+  <title>Michelangelo — Last Judgment (Prototype v2.2)</title>
   <style>
     html, body { height: 100%; margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; }
     #viewer { width: 100%; height: 100vh; background: #0b0b0b; }
-    .hotspot { position: absolute; border: 2px dashed rgba(255,255,255,0.6); background: rgba(255,255,255,0.10); transition: background 0.2s, border-color 0.2s; pointer-events: none; }
+    .hotspot {
+      position: absolute; border: 2px dashed rgba(255,255,255,0.6); background: rgba(255,255,255,0.10);
+      transition: background 0.2s, border-color 0.2s; pointer-events: auto; cursor: pointer;
+    }
+    .hotspot:hover { background: rgba(255,255,255,0.18); border-color: rgba(255,255,255,0.95); }
     .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.65); display: none; align-items: center; justify-content: center; z-index: 9999; }
     .modal { width: min(720px, 92vw); max-height: 86vh; overflow: auto; background: #111; color: #f3f3f3; border-radius: 16px; box-shadow: 0 20px 60px rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.1); }
     .modal header { padding: 18px 22px; border-bottom: 1px solid rgba(255,255,255,0.08); font-size: 1.1rem; letter-spacing: .2px; background: linear-gradient(180deg, #181818, #121212); position: sticky; top: 0; }
@@ -24,14 +28,16 @@
     .interstitial footer { padding: 18px 22px; border-top: 1px solid rgba(255,255,255,0.08); display: flex; gap: 10px; flex-wrap: wrap; }
     .kbd { border: 1px solid rgba(255,255,255,0.25); border-bottom-width: 2px; padding: 0 6px; border-radius: 6px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; background: #1b1b1b; }
     #error { position: fixed; top: 10px; left: 10px; right: 10px; background: #561b1b; color: #fbd; padding: 10px 14px; border-radius: 10px; display: none; z-index: 10000; }
+    #debug { position: fixed; top: 10px; right: 10px; background: rgba(255,255,255,0.1); color: #fff; padding: 6px 8px; border-radius: 8px; font-size: 12px; display:none; z-index: 10001; }
   </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/openseadragon/4.1.1/openseadragon.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/openseadragon/4.1.1/openseadragon.min.css" crossorigin="anonymous" referrerpolicy="no-referrer" />
 </head>
 <body>
   <div id="viewer"></div>
-  <div class="hint">Scroll to zoom • drag to pan • click hotspots</div>
+  <div class="hint">Scroll to zoom • drag to pan • click hotspots (press <span class="kbd">d</span> for debug)</div>
   <div id="error"></div>
+  <div id="debug"></div>
 
   <div class="modal-backdrop" id="modalBackdrop" role="dialog" aria-modal="true" aria-hidden="true">
     <div class="modal" role="document">
@@ -110,13 +116,13 @@
       }
     };
 
-    // Define hotspot rectangles (normalized to image coords)
+    // Slightly enlarged hotspot rects for easier tapping
     const HOTSPOTS = [
-      { key: 'bartholomew', rect: { x: 0.54, y: 0.48, w: 0.10, h: 0.12 }, type: 'zoom' },
-      { key: 'charon',      rect: { x: 0.70, y: 0.78, w: 0.20, h: 0.18 }, type: 'modal' },
-      { key: 'minos',       rect: { x: 0.86, y: 0.82, w: 0.10, h: 0.12 }, type: 'modal' },
-      { key: 'christ',      rect: { x: 0.47, y: 0.22, w: 0.10, h: 0.12 }, type: 'modal' },
-      { key: 'lament',      rect: { x: 0.27, y: 0.44, w: 0.12, h: 0.14 }, type: 'modal' },
+      { key: 'bartholomew', rect: { x: 0.53, y: 0.47, w: 0.12, h: 0.14 }, type: 'zoom' },
+      { key: 'charon',      rect: { x: 0.69, y: 0.77, w: 0.22, h: 0.20 }, type: 'modal' },
+      { key: 'minos',       rect: { x: 0.85, y: 0.81, w: 0.12, h: 0.14 }, type: 'modal' },
+      { key: 'christ',      rect: { x: 0.46, y: 0.21, w: 0.12, h: 0.14 }, type: 'modal' },
+      { key: 'lament',      rect: { x: 0.26, y: 0.43, w: 0.14, h: 0.16 }, type: 'modal' },
     ];
 
     const viewer = OpenSeadragon({
@@ -140,11 +146,13 @@
       el.style.display = 'block';
     }
 
-    // Draw overlay rectangles for visual guidance (no pointer events)
     function drawOverlays(){
-      HOTSPOTS.forEach(h => {
+      HOTSPOTS.forEach((h,i) => {
         const elt = document.createElement('div');
         elt.className = 'hotspot';
+        elt.title = h.key;
+        // attach click directly to overlay
+        elt.addEventListener('click', (ev)=>{ ev.stopPropagation(); activate(h); });
         viewer.addOverlay({
           element: elt,
           location: new OpenSeadragon.Rect(h.rect.x, h.rect.y, h.rect.w, h.rect.h)
@@ -152,12 +160,10 @@
       });
     }
 
-    // Hit test: is a point inside a rect?
     function within(p, r){
       return p.x >= r.x && p.y >= r.y && p.x <= (r.x + r.w) && p.y <= (r.y + r.h);
     }
 
-    // Modal controls
     function openModal(key){
       const data = CONTENT[key];
       document.getElementById('modalTitle').innerHTML = data.title;
@@ -173,7 +179,6 @@
     }
     function closeModal(){ document.getElementById('modalBackdrop').style.display = 'none'; }
 
-    // Interstitial
     function openResource(id){
       const res = RESOURCES[id];
       document.getElementById('interHeader').textContent = res.title;
@@ -187,36 +192,32 @@
     function showInterstitial(){ document.getElementById('interstitial').style.display = 'block'; }
     function hideInterstitial(){ document.getElementById('interstitial').style.display = 'none'; }
 
-    // Actions
     function zoomToRect(r, thenModalKey){
       const rect = new OpenSeadragon.Rect(r.x, r.y, r.w, r.h);
       viewer.viewport.fitBoundsWithConstraints(rect, true);
       setTimeout(()=>openModal(thenModalKey), 450);
     }
 
-    // When image opens
-    viewer.addHandler('open', function(){
-      drawOverlays();
-    });
+    function activate(h){
+      if (h.type === 'zoom') { zoomToRect(h.rect, h.key); }
+      else { openModal(h.key); }
+    }
 
-    // Handle clicks robustly on the canvas itself
+    // Optional debug overlay
+    let debugOn = false;
+    document.addEventListener('keydown', (e)=>{ if (e.key.toLowerCase() === 'd') { debugOn = !debugOn; document.getElementById('debug').style.display = debugOn ? 'block' : 'none'; } });
+    function setDebug(text){ const el = document.getElementById('debug'); el.textContent = text; }
+
+    viewer.addHandler('open', function(){ drawOverlays(); });
+
+    // Canvas click fallback
     viewer.addHandler('canvas-click', function(e){
-      // Ignore double-clicks (used for zooming)
-      if (e.quick){
-        const webPoint = e.position; // in pixels
-        const viewportPoint = viewer.viewport.pointFromPixel(webPoint);
-        const imagePoint = viewer.viewport.viewportToImageCoordinates(viewportPoint);
-        // Convert to normalized image coords (0..1)
-        const norm = { x: imagePoint.x / 1604, y: imagePoint.y / 2048 };
-
-        for (const h of HOTSPOTS){
-          if (within(norm, h.rect)){
-            if (h.type === 'zoom') { zoomToRect(h.rect, h.key); }
-            else { openModal(h.key); }
-            break;
-          }
-        }
-      }
+      const webPoint = e.position;
+      const viewportPoint = viewer.viewport.pointFromPixel(webPoint);
+      const imagePoint = viewer.viewport.viewportToImageCoordinates(viewportPoint);
+      const norm = { x: imagePoint.x / 1604, y: imagePoint.y / 2048 };
+      if (debugOn) setDebug(`click @ norm x={norm.x.toFixed(3)}, y={norm.y.toFixed(3)}`);
+      for (const h of HOTSPOTS){ if (within(norm, h.rect)) { activate(h); break; } }
     });
 
     viewer.addHandler('open-failed', function(e){ showError("Image failed to open. If this is on GitHub Pages, ensure the PNG sits next to index.html."); });
